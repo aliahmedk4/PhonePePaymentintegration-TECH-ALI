@@ -1,0 +1,164 @@
+﻿@{
+    ViewBag.Title = "Home Page";
+}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+<div class="jumbotron">
+    <h3>PhonePe Payment</h3>
+    <input id="amount" type="number" class="form-control" placeholder="Enter Amount" style="display: inline-block;" />
+    <button id="btnPayment" class="btn btn-success" style="display: inline-block;">
+        Payment
+        <span class="spinner" style="display: none"><i class="fas fa-spinner fa-spin"></i></span>
+    </button>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+
+        <h2>Getting started</h2>
+        <p>
+            ASP.NET MVC gives you a powerful, patterns-based way to build dynamic websites that
+            enables a clean separation of concerns and gives you full control over markup
+            for enjoyable, agile development.
+        </p>
+        <p><a class="btn btn-default" href="https://go.microsoft.com/fwlink/?LinkId=301865">Learn more &raquo;</a></p>
+    </div>
+    <div class="col-md-4">
+        <h2>Get more libraries</h2>
+        <p>NuGet is a free Visual Studio extension that makes it easy to add, remove, and update libraries and tools in Visual Studio projects.</p>
+        <p><a class="btn btn-default" href="https://go.microsoft.com/fwlink/?LinkId=301866">Learn more &raquo;</a></p>
+    </div>
+    <div class="col-md-4">
+        <h2>Web Hosting</h2>
+        <p>You can easily find a web hosting company that offers the right mix of features and price for your applications.</p>
+        <p><a class="btn btn-default" href="https://go.microsoft.com/fwlink/?LinkId=301867">Learn more &raquo;</a></p>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        $("#btnPayment").click(function () {
+            var intervalId; // Declare the intervalId variable to control the intervals
+
+            $('#btnPayment').text('Processing Payment...');
+
+            let transid = `AO129901`;
+            let amount = parseInt($('#amount').val());
+
+            let payload = {
+                "merchantId": `MERCHANTUAT`,
+                "merchantTransactionId": transid,
+                "merchantUserId": "MUIE2122",
+                "amount": amount * 100,
+                "redirectUrl": 'https://webhook.site/redirect-url',
+                "redirectMode": "POST",
+                "callbackUrl": 'https://webhook.site/callback-url',
+                "mobileNumber": '9769111222',
+                "paymentInstrument": {
+                    "type": "PAY_PAGE"
+                }
+            }
+
+            const base64 = btoa(JSON.stringify(payload)); // Encode payload to base64
+            const sign = base64 + `/pg/v1/pay099eb0cd-02cf-4e2a-8aca-3e6c6aff0399`; // Modify this accordingly based on your API
+            let X_VERIFY = signRequest(sign) + "###1";
+
+            // Create an object to send in the request body
+            const requestBody = {
+                X_VERIFY: X_VERIFY,
+                base64: base64
+                // Other data you want to send in the request body
+            };
+
+            $.ajax({
+                url: "/Home/GeneratePaymentLink", // Replace with your controller and action names
+                type: "POST", // Change to POST to send data in the request body
+                dataType: "json",
+                data: JSON.stringify(requestBody), // Convert the object to JSON
+                contentType: "application/json", // Set the content type
+                success: function (data) {
+                    let phonepeResponse = JSON.parse(data.phonepeResponse);
+
+                    var url = phonepeResponse.data.instrumentResponse.redirectInfo.url;
+
+                    window.open(url);
+                    scheduleStatusChecks(transid);
+                    // Handle the data received from the server
+
+
+                },
+                error: function (error) {
+                    // Handle errors, if any
+                    console.error(error);
+                }
+            });
+        });
+
+        function scheduleStatusChecks(TransactionId) {
+            // Initial check after 20-25 seconds
+            setTimeout(function () {
+                $('#btnPayment').text('Checking Payment Status...');
+
+                checkPhonePeStatus(TransactionId);
+
+                // Schedule checks "Every 3 seconds once for the next 30 seconds"
+                var intervalCount = 0;
+                intervalId = setInterval(function () {
+                    checkPhonePeStatus(TransactionId);
+                    intervalCount++;
+
+                    if (intervalCount >= 10) {
+                        clearInterval(intervalId); // Stop after 30 seconds (10 intervals)
+                    }
+                }, 3000);
+            }, 20000 + Math.random() * 5000); // Random delay within the specified range
+        }
+
+        function checkPhonePeStatus(TransactionId) {
+            const sign_status = `/pg/v1/status/MERCHANTUAT/AO129901099eb0cd-02cf-4e2a-8aca-3e6c6aff0399`; // Modify this accordingly based on your API
+            let X_VERIFY_STATUS = signRequest(sign_status) + "###1";
+
+            // Create an object to send in the request body
+            const requestBody = {
+                X_VERIFY: X_VERIFY_STATUS,
+                TransactionId: TransactionId,
+                MERCHANTID: 'MERCHANTUAT'
+                // Other data you want to send in the request body
+            };
+
+            $.ajax({
+                url: "/Home/CheckPaymentStatus", // Replace with your controller and action names
+                type: "POST", // Change to POST to send data in the request body
+                dataType: "json",
+                data: JSON.stringify(requestBody), // Convert the object to JSON
+                contentType: "application/json", // Set the content type
+                success: function (res) {
+                    let phonepestatus = JSON.parse(res.phonepeResponse);
+
+                    if (phonepestatus.code == 'PAYMENT_SUCCESS') {
+                        clearInterval(intervalCount);
+                        alert('PAYMENT SUCCESS');
+                    }
+                    else if (phonepestatus.code == 'PAYMENT_ERROR') {
+                        alert('PAYMENT ERROR');
+                    }
+
+
+                },
+                error: function (error) {
+                    // Handle errors, if any
+                    console.error(error);
+                }
+            });
+        }
+    });
+
+    function signRequest(payload) {
+        // Assuming you are using CryptoJS for hashing
+        const hashedPayload = CryptoJS.SHA256(payload).toString(CryptoJS.enc.Hex);
+        return hashedPayload;
+    }
+
+</script>
